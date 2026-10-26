@@ -20,18 +20,7 @@ La integración real usa Azure Foundry Responses v1. El backend Python extrae fo
 
 La configuración comprobada el **15 de octubre de 2026** utilizó `gpt-6.1-sol`, versión `2026-09-29`, sobre una cuenta de IA en Sweden Central. Un contenedor con Python y FFmpeg se alojó en App Service Linux B1, West Europe; Azure Container Registry almacenaba su imagen en Sweden Central. El host utilizaba identidad administrada de Microsoft Entra y persistencia en `/home` para estado y ledger SQLite. El acceso a la aplicación y al relay HTTPS del ledger estaba restringido a la red del propietario.
 
-```mermaid
-flowchart LR
-    Browser["Navegador: vídeo y checklist"] --> Backend["Backend Python / FastAPI"]
-    Backend --> Frames["Fotogramas y tiempos privados"]
-    Frames --> Foundry["Azure Foundry Responses v1"]
-    Foundry --> Backend
-    Backend --> State["Estado, revisión y exportaciones"]
-    Backend --> Ledger["Ledger SQLite compartido"]
-    Entra["Microsoft Entra ID"] -.-> Backend
-    ACR["Azure Container Registry"] --> App["App Service Linux B1"]
-    App --- Backend
-```
+![Arquitectura desplegada: App Service, Foundry Responses, Container Registry, identidad administrada y persistencia](docs/architecture.svg)
 
 El backend puede ejecutarse localmente. La prueba independiente recorrió su interfaz local contra Azure real y el relay alojado; del host remoto comprobó salud y commit. La disponibilidad actual de aquel despliegue no se ha verificado. Para reproducir la integración necesitas recursos y configuración propios vigentes.
 
@@ -39,9 +28,11 @@ El backend puede ejecutarse localmente. La prueba independiente recorrió su int
 
 Requisitos: macOS o Linux, [uv](https://docs.astral.sh/uv/getting-started/installation/), Python **3.14.6** y FFmpeg/FFprobe con soporte H.264/libx264. El archivo `.python-version` fija Python y `uv.lock` fija las dependencias. uv puede descargar el intérprete si falta.
 
-Descarga o clona la distribución de este código y abre la carpeta que contiene `pyproject.toml`. Ejecuta:
+Clona el repositorio público y abre la carpeta del proyecto:
 
 ```sh
+git clone https://github.com/sboludaf/azure-content-understanding-video-checklist-lab.git
+cd azure-content-understanding-video-checklist-lab
 uv sync --frozen
 uv run --frozen python scripts/prepare_media.py --inspect
 uv run --frozen --env-file .env.example uvicorn video_checklist.main:app --host 127.0.0.1 --port 8765

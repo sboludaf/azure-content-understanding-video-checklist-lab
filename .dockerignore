@@ -1,0 +1,33 @@
+# Allow only the runtime source and dependency lock into a remote build context.
+*
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!LICENSE
+!video_checklist/
+!video_checklist/**
+!data/
+!data/manifest.json
+
+# Exclude sensitive and generated files even if nested within runtime source.
+**/.env
+**/.env.*
+**/*.private.*
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/runtime/
+**/media/
+**/*.mp4
+**/*.webm
+**/*.mov
+**/*.pem
+**/*.key
+**/*.pfx
+**/.git/
+**/.venv/
+**/authorization.json
+**/ledger.json
+**/deployment.json
+**/source-manifest.json

@@ -1,0 +1,197 @@
+{
+  "lab_id": "2026-10-15-content-understanding-video-checklist",
+  "proposal_hash": "0f751b92278e7bb3994fcdfadf6761c100037f839bb1daf9641b5e7c12ee30b7",
+  "dataset_revision": 1,
+  "status": "implementer_visual_gold_frozen_before_ai_pending_independent_test",
+  "created_at": "2026-10-12T19:11:57.282658+00:00",
+  "annotation_method": "Implementer directly inspected source frames at 2 FPS, threading boundary at 5 FPS, and all three derived clips at 2 FPS before any AI call. Event boundaries manually estimated; temporal label uncertainty up to 500ms. This is not service grounding; independent Tester review is pending.",
+  "independent_reviewer_status": "pending_tester",
+  "matching": {
+    "method": "one_to_one_step_id_and_valid_interval",
+    "start_tolerance_ms": 3000,
+    "precision_min": 0.9,
+    "recall_min": 0.8,
+    "zero_denominator_pass": false
+  },
+  "expected_steps": [
+    {
+      "step_id": "S1",
+      "order": 1,
+      "description": "Preparar un doble de cuerda amarilla entre las manos, lejos de la anilla."
+    },
+    {
+      "step_id": "S2",
+      "order": 2,
+      "description": "Introducir el doble de cuerda amarilla a través de la anilla metálica izquierda."
+    },
+    {
+      "step_id": "S3",
+      "order": 3,
+      "description": "Manipular y entrelazar el doble junto a la anilla izquierda hasta formar un nudo visible."
+    },
+    {
+      "step_id": "S4",
+      "order": 4,
+      "description": "Tirar del ramal largo hacia la derecha y dejar extendida la cuerda desde el nudo."
+    }
+  ],
+  "clips": [
+    {
+      "clip_id": "base",
+      "duration_ms": 37000,
+      "observed_events": [
+        {
+          "step_id": "S1",
+          "start_ms": 5200,
+          "end_ms": 12800,
+          "objects": [
+            "cuerda amarilla",
+            "manos"
+          ]
+        },
+        {
+          "step_id": "S2",
+          "start_ms": 13300,
+          "end_ms": 14800,
+          "objects": [
+            "cuerda amarilla",
+            "anilla metálica izquierda",
+            "manos"
+          ]
+        },
+        {
+          "step_id": "S3",
+          "start_ms": 15000,
+          "end_ms": 32700,
+          "objects": [
+            "cuerda amarilla",
+            "anilla metálica izquierda",
+            "manos"
+          ]
+        },
+        {
+          "step_id": "S4",
+          "start_ms": 33000,
+          "end_ms": 36500,
+          "objects": [
+            "cuerda amarilla",
+            "anilla metálica izquierda",
+            "manos"
+          ]
+        }
+      ],
+      "not_observed_steps": [],
+      "observed_order": [
+        "S1",
+        "S2",
+        "S3",
+        "S4"
+      ],
+      "sha256": "2b039dd448a97e3f734168505a84bc3a6982254e1f7decd5a4914737dbd27846"
+    },
+    {
+      "clip_id": "omitted",
+      "duration_ms": 24000,
+      "observed_events": [
+        {
+          "step_id": "S2",
+          "start_ms": 300,
+          "end_ms": 1800,
+          "objects": [
+            "cuerda amarilla",
+            "anilla metálica izquierda",
+            "manos"
+          ]
+        },
+        {
+          "step_id": "S3",
+          "start_ms": 2000,
+          "end_ms": 19700,
+          "objects": [
+            "cuerda amarilla",
+            "anilla metálica izquierda",
+            "manos"
+          ]
+        },
+        {
+          "step_id": "S4",
+          "start_ms": 20000,
+          "end_ms": 23500,
+          "objects": [
+            "cuerda amarilla",
+            "anilla metálica izquierda",
+            "manos"
+          ]
+        }
+      ],
+      "not_observed_steps": [
+        "S1"
+      ],
+      "observed_order": [
+        "S2",
+        "S3",
+        "S4"
+      ],
+      "sha256": "b4c2ce2165b7a245053e2791addbd70c89fd2ec13fe211474e9fa7b5720d72e2"
+    },
+    {
+      "clip_id": "reordered",
+      "duration_ms": 37000,
+      "observed_events": [
+        {
+          "step_id": "S2",
+          "start_ms": 300,
+          "end_ms": 1800,
+          "objects": [
+            "cuerda amarilla",
+            "anilla metálica izquierda",
+            "manos"
+          ]
+        },
+        {
+          "step_id": "S1",
+          "start_ms": 7200,
+          "end_ms": 14800,
+          "objects": [
+            "cuerda amarilla",
+            "manos"
+          ]
+        },
+        {
+          "step_id": "S3",
+          "start_ms": 15000,
+          "end_ms": 32700,
+          "objects": [
+            "cuerda amarilla",
+            "anilla metálica izquierda",
+            "manos"
+          ]
+        },
+        {
+          "step_id": "S4",
+          "start_ms": 33000,
+          "end_ms": 36500,
+          "objects": [
+            "cuerda amarilla",
+            "anilla metálica izquierda",
+            "manos"
+          ]
+        }
+      ],
+      "not_observed_steps": [],
+      "observed_order": [
+        "S2",
+        "S1",
+        "S3",
+        "S4"
+      ],
+      "sha256": "b676509729bd57c05cea82982cd3ccca8049fd337e16066cc347c93fc5f47be3"
+    }
+  ],
+  "limitations": [
+    "Single licensed source and controlled edits, not independent real-world examples.",
+    "S2 is visible for approximately 1.5 seconds and may be missed by approximate 1 FPS service sampling.",
+    "Labels describe visible actions only; they do not certify the knot, load capacity or safety.",
+    "Omission removes seeing S1; a pre-existing folded rope remains visible and is not evidence that S1 occurred in the omitted recording."
+  ]
+}

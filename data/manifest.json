@@ -1,0 +1,253 @@
+{
+  "lab_id": "2026-10-15-content-understanding-video-checklist",
+  "proposal_hash": "0f751b92278e7bb3994fcdfadf6761c100037f839bb1daf9641b5e7c12ee30b7",
+  "dataset_revision": 1,
+  "status": "licensed_local_dataset_pending_independent_review",
+  "created_at": "2026-10-12T19:10:08.046212+00:00",
+  "source": {
+    "title": "Tying off onto the middle of a rope",
+    "author": "Slashme",
+    "source_page_url": "https://commons.wikimedia.org/wiki/File:Tying_off_onto_the_middle_of_a_rope.webm",
+    "source_revision_url": "https://commons.wikimedia.org/w/index.php?title=File:Tying_off_onto_the_middle_of_a_rope.webm&oldid=1120719840",
+    "source_revision_id": 1120719840,
+    "source_file_uploaded_at": "2021-03-20T21:49:00Z",
+    "file_url": "https://upload.wikimedia.org/wikipedia/commons/c/c3/Tying_off_onto_the_middle_of_a_rope.webm",
+    "filename": "original.webm",
+    "size_bytes": 190825781,
+    "duration_ms": 441256,
+    "sha256": "94fa9fff509b1d7c535309e57118a1c60ba52ab43baed63253c32d3a724d028f",
+    "commons_sha1": "e54718eca082307590c7e570e560bc9803219df3",
+    "license": "CC-BY-SA-4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "attribution": "Tying off onto the middle of a rope — Slashme (2021), Wikimedia Commons, CC BY-SA 4.0. Changes: continuous 0–37s extract, audio removed, resize/H.264 conversion; omitted clip removes 0–13s; reordered clip swaps 0–13s with 13–15s. Author does not endorse this lab."
+  },
+  "encoder": {
+    "version": "ffmpeg version 8.1.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "configuration": "configuration: --prefix=/opt/homebrew/Cellar/ffmpeg/8.1.1 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags= --enable-ffplay --enable-gpl --enable-libsvtav1 --enable-libopus --enable-libx264 --enable-libmp3lame --enable-libdav1d --enable-libvmaf --enable-libvpx --enable-libx265 --enable-openssl --enable-videotoolbox --enable-audiotoolbox --enable-neon",
+    "recorded_full_version": "ffmpeg version 8.1.1 Copyright (c) 2000-2026 the FFmpeg developers\nbuilt with Apple clang version 21.0.0 (clang-2100.0.123.102)\nconfiguration: --prefix=/opt/homebrew/Cellar/ffmpeg/8.1.1 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags= --enable-ffplay --enable-gpl --enable-libsvtav1 --enable-libopus --enable-libx264 --enable-libmp3lame --enable-libdav1d --enable-libvmaf --enable-libvpx --enable-libx265 --enable-openssl --enable-videotoolbox --enable-audiotoolbox --enable-neon\nlibavutil      60. 26.101 / 60. 26.101\nlibavcodec     62. 28.101 / 62. 28.101\nlibavformat    62. 12.101 / 62. 12.101\nlibavdevice    62.  3.101 / 62.  3.101\nlibavfilter    11. 14.101 / 11. 14.101\nlibswscale      9.  5.101 /  9.  5.101\nlibswresample   6.  3.101 /  6.  3.101\n\nExiting with exit code 0\n"
+  },
+  "media_policy": {
+    "default_directory": "/private/tmp/mvp-labs/2026-10-15-content-understanding-video-checklist/media",
+    "outside_git_and_vault": true,
+    "public_upload_authorized": false,
+    "audio_removed": true,
+    "faces_seen_in_selected_clip": false,
+    "visible_person_parts": "hands and forearms only",
+    "raw_response_location": "private temporary runtime directory; no AI response obtained yet"
+  },
+  "clips": [
+    {
+      "clip_id": "base",
+      "filename": "base.mp4",
+      "duration_ms": 37000,
+      "size_bytes": 6579884,
+      "sha256": "2b039dd448a97e3f734168505a84bc3a6982254e1f7decd5a4914737dbd27846",
+      "codec": "h264",
+      "width": 1280,
+      "height": 720,
+      "frame_rate": "25/1",
+      "segments": [
+        {
+          "source_start_ms": 0,
+          "source_end_ms": 37000,
+          "output_start_ms": 0,
+          "output_end_ms": 37000
+        }
+      ],
+      "command": [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        "{original}",
+        "-filter_complex",
+        "[0:v]trim=start=0:end=37,setpts=PTS-STARTPTS[v0];[v0]concat=n=1:v=1:a=0,scale=1280:720,fps=25[v]",
+        "-map",
+        "[v]",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-map_metadata",
+        "-1",
+        "-fflags",
+        "+bitexact",
+        "-flags:v",
+        "+bitexact",
+        "-movflags",
+        "+faststart",
+        "{output}"
+      ],
+      "audio": "removed",
+      "license": "CC-BY-SA-4.0"
+    },
+    {
+      "clip_id": "omitted",
+      "filename": "omitted.mp4",
+      "duration_ms": 24000,
+      "size_bytes": 4267432,
+      "sha256": "b4c2ce2165b7a245053e2791addbd70c89fd2ec13fe211474e9fa7b5720d72e2",
+      "codec": "h264",
+      "width": 1280,
+      "height": 720,
+      "frame_rate": "25/1",
+      "segments": [
+        {
+          "source_start_ms": 13000,
+          "source_end_ms": 37000,
+          "output_start_ms": 0,
+          "output_end_ms": 24000
+        }
+      ],
+      "command": [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        "{original}",
+        "-filter_complex",
+        "[0:v]trim=start=13:end=37,setpts=PTS-STARTPTS[v0];[v0]concat=n=1:v=1:a=0,scale=1280:720,fps=25[v]",
+        "-map",
+        "[v]",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-map_metadata",
+        "-1",
+        "-fflags",
+        "+bitexact",
+        "-flags:v",
+        "+bitexact",
+        "-movflags",
+        "+faststart",
+        "{output}"
+      ],
+      "audio": "removed",
+      "license": "CC-BY-SA-4.0"
+    },
+    {
+      "clip_id": "reordered",
+      "filename": "reordered.mp4",
+      "duration_ms": 37000,
+      "size_bytes": 6627302,
+      "sha256": "b676509729bd57c05cea82982cd3ccca8049fd337e16066cc347c93fc5f47be3",
+      "codec": "h264",
+      "width": 1280,
+      "height": 720,
+      "frame_rate": "25/1",
+      "segments": [
+        {
+          "source_start_ms": 13000,
+          "source_end_ms": 15000,
+          "output_start_ms": 0,
+          "output_end_ms": 2000
+        },
+        {
+          "source_start_ms": 0,
+          "source_end_ms": 13000,
+          "output_start_ms": 2000,
+          "output_end_ms": 15000
+        },
+        {
+          "source_start_ms": 15000,
+          "source_end_ms": 37000,
+          "output_start_ms": 15000,
+          "output_end_ms": 37000
+        }
+      ],
+      "command": [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        "{original}",
+        "-filter_complex",
+        "[0:v]trim=start=13:end=15,setpts=PTS-STARTPTS[v0];[0:v]trim=start=0:end=13,setpts=PTS-STARTPTS[v1];[0:v]trim=start=15:end=37,setpts=PTS-STARTPTS[v2];[v0][v1][v2]concat=n=3:v=1:a=0,scale=1280:720,fps=25[v]",
+        "-map",
+        "[v]",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-map_metadata",
+        "-1",
+        "-fflags",
+        "+bitexact",
+        "-flags:v",
+        "+bitexact",
+        "-movflags",
+        "+faststart",
+        "{output}"
+      ],
+      "audio": "removed",
+      "license": "CC-BY-SA-4.0"
+    }
+  ],
+  "evaluation": {
+    "gold_file": "data/gold.json",
+    "gold_sha256": "0f93af6237385e258102055561d0be3d8eddbded481594573ae3ad94c66bb687",
+    "ai_calls_before_gold": 0,
+    "independent_tester_review": "pending",
+    "maximum_start_error_ms": 3000,
+    "zero_denominator_pass": false,
+    "controlled_variations_of_one_source": true,
+    "gold_frozen_at": "2026-10-12T19:11:57.282658+00:00"
+  },
+  "expected_steps": [
+    {
+      "id": "S1",
+      "label": "Preparar un doble de cuerda amarilla entre las manos, lejos de la anilla."
+    },
+    {
+      "id": "S2",
+      "label": "Introducir el doble de cuerda amarilla a través de la anilla metálica izquierda."
+    },
+    {
+      "id": "S3",
+      "label": "Manipular y entrelazar el doble junto a la anilla izquierda hasta formar un nudo visible."
+    },
+    {
+      "id": "S4",
+      "label": "Tirar del ramal largo hacia la derecha y dejar extendida la cuerda desde el nudo."
+    }
+  ],
+  "inspection": {
+    "completed_at": "2026-10-12T19:11:57.282658+00:00",
+    "observer": "Implementer",
+    "source_frames_fps": 2,
+    "threading_boundary_source_seconds": [
+      11,
+      18
+    ],
+    "threading_boundary_fps": 5,
+    "derived_clips_inspected": [
+      "base",
+      "omitted",
+      "reordered"
+    ],
+    "frame_files_private": true,
+    "independent_tester_review": "pending"
+  }
+}

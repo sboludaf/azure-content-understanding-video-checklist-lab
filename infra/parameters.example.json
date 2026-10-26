@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "swedencentral"
+    },
+    "hostingLocation": {
+      "value": "westeurope"
+    },
+    "webAppName": {
+      "value": "app-video-checklist-example"
+    },
+    "planName": {
+      "value": "asp-video-checklist-example"
+    },
+    "planSku": {
+      "value": "B1"
+    },
+    "registryName": {
+      "value": "crvideochecklistexample"
+    },
+    "ownerIpCidr": {
+      "value": ""
+    },
+    "imageReference": {
+      "value": "video-checklist:replace-with-full-commit-sha"
+    },
+    "expectedCommit": {
+      "value": "replace-with-full-40-character-git-sha"
+    },
+    "deployHosting": {
+      "value": false
+    },
+    "analysisMode": {
+      "value": "fixture"
+    },
+    "aiResourceId": {
+      "value": ""
+    },
+    "cleanupDueAt": {
+      "value": "REPLACE_WITH_YOUR_CLEANUP_DUE_ISO8601"
+    },
+    "applicationSettings": {
+      "value": {}
+    }
+  }
+}

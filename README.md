@@ -1,98 +1,78 @@
 # Vídeo de un procedimiento a checklist con evidencia
 
-Aplicación web en español para revisar una grabación breve de un procedimiento manual. Muestra los pasos junto al reproductor, permite saltar al intervalo de cada evidencia y guarda una revisión humana separada del análisis de IA. El resultado puede descargarse como HTML y JSON.
+Aplicación web en español para revisar una grabación breve de un procedimiento manual. Subes un vídeo propio, defines entre 3 y 6 pasos esperados y obtienes una checklist con las acciones que Azure identifica y sus intervalos. Cada evidencia permite saltar al momento del vídeo para comprobarla. Puedes guardar tu revisión por separado y descargar un informe HTML o JSON.
 
-Una persona que prepara formación puede usarla para localizar acciones, revisar dudas y contrastar el orden que aparece en el vídeo. La demostración utiliza una cuerda y una anilla. La aplicación analiza la grabación; no certifica la seguridad del nudo ni lo ocurrido fuera de cámara.
+Sirve, por ejemplo, para revisar un vídeo de formación y localizar qué pasos se ven, cuáles requieren revisión y en qué orden aparecen. Una acción que no se observa en la grabación puede haber ocurrido fuera de cámara. El resultado necesita revisión humana y no certifica la seguridad ni la ejecución correcta del procedimiento.
 
-## Qué puedes probar
+## Desplegar en tu Azure
 
-1. Cargar el MP4 de ejemplo o subir uno de hasta 90 segundos y 25 MiB, en H.264.
-2. Previsualizarlo e iniciar el análisis con estados de progreso.
-3. Consultar la checklist y pulsar una evidencia para navegar por el vídeo.
-4. Guardar una valoración propia sin reemplazar la salida de IA.
-5. Descargar HTML y JSON y recuperar el mismo trabajo al recargar.
+La aplicación realiza todos los análisis con Azure Foundry Responses. Necesitas tu propia suscripción Azure, cuota para el modelo y un vídeo real. El repositorio incluye la infraestructura y el despliegue con Azure Developer CLI (`azd`).
 
-Los archivos corruptos, incompatibles o excesivos se rechazan antes de enviarse a Azure. El modo de integración real utiliza cuatro pasos congelados, S1 a S4. La edición libre de tres a seis pasos corresponde a la demostración sintética.
-
-## Arquitectura
-
-La integración real usa Azure Foundry Responses v1. El backend Python extrae fotogramas privados con sus tiempos, envía una solicitud al modelo y consulta el identificador de esa operación para recuperar el resultado. No vuelve a enviar el análisis por recargar la página.
-
-La configuración comprobada el **15 de octubre de 2026** utilizó `gpt-6.1-sol`, versión `2026-09-29`, sobre una cuenta de IA en Sweden Central. Un contenedor con Python y FFmpeg se alojó en App Service Linux B1, West Europe; Azure Container Registry almacenaba su imagen en Sweden Central. El host utilizaba identidad administrada de Microsoft Entra y persistencia en `/home` para estado y ledger SQLite. El acceso a la aplicación y al relay HTTPS del ledger estaba restringido a la red del propietario.
-
-![Arquitectura desplegada: App Service, Foundry Responses, Container Registry, identidad administrada y persistencia](docs/architecture.svg)
-
-El backend puede ejecutarse localmente. La prueba independiente recorrió su interfaz local contra Azure real y el relay alojado; del host remoto comprobó salud y commit. La disponibilidad actual de aquel despliegue no se ha verificado. Para reproducir la integración necesitas recursos y configuración propios vigentes.
-
-## Inicio rápido: demostración sintética sin Azure
-
-Requisitos: macOS o Linux, [uv](https://docs.astral.sh/uv/getting-started/installation/), Python **3.14.6** y FFmpeg/FFprobe con soporte H.264/libx264. El archivo `.python-version` fija Python y `uv.lock` fija las dependencias. uv puede descargar el intérprete si falta.
-
-Clona el repositorio público y abre la carpeta del proyecto:
+Instala [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) 1.34.2 o posterior y Git. Usa una cuenta con permisos para crear los recursos y sus asignaciones de roles en la suscripción elegida. La construcción de la imagen se hace en Azure Container Registry.
 
 ```sh
 git clone https://github.com/sboludaf/azure-content-understanding-video-checklist-lab.git
 cd azure-content-understanding-video-checklist-lab
-uv sync --frozen
-uv run --frozen python scripts/prepare_media.py --inspect
-uv run --frozen --env-file .env.example uvicorn video_checklist.main:app --host 127.0.0.1 --port 8765
+azd auth login
+azd env new video-checklist
+azd env set AZURE_SUBSCRIPTION_ID "<tu-suscripcion>"
+azd env set AZURE_LOCATION swedencentral
+azd env set MVP_ALLOWED_CLIENT_CIDR "<tu-IP-publica>/32"
+azd provision
+azd deploy
 ```
 
-Abre **http://127.0.0.1:8765**. Pulsa **Cargar vídeo de ejemplo**, **Analizar vídeo**, revisa un intervalo y guarda tus notas. Descarga los informes, abre el HTML y recarga la aplicación para comprobar la recuperación del trabajo.
+Sustituye la suscripción y la IP. La restricción permite entrar a la aplicación únicamente desde esa IP; para IPv6 utiliza `/128`. Conserva el entorno local de `azd`, que identifica los recursos que has creado.
 
-Este modo genera **resultados sintéticos**. No llama a Azure ni genera cargos de análisis en Azure. Sus eventos ilustran el recorrido y no describen un vídeo propio que subas. La preparación inicial descarga una grabación pública de unos 191 MB si falta y crea los clips fuera del repositorio. Requiere red para esa descarga. Consulta [datos y licencia](docs/data.md).
+`azd provision` crea el grupo de recursos, Container Registry, App Service y la cuenta de IA con su deployment e identidad. `azd deploy` construye y publica el código en esos recursos. En las siguientes actualizaciones de código basta con `azd deploy`; si cambias la infraestructura, vuelve a ejecutar primero `azd provision`.
 
-## Ejecutar el análisis real en Azure
+El modelo predeterminado es `gpt-6.1-sol`, versión `2026-09-29`, con SKU `GlobalStandard`. Comprueba su disponibilidad y cuota en tu cuenta antes de aprovisionar. Puedes configurar un modelo compatible con visión, Responses, ejecución en segundo plano y salida JSON Schema; cambiarlo requiere comprobar de nuevo los resultados. Los valores de región y modelo están en la [guía de Azure](docs/deploy-hosting.md).
 
-La demostración sintética funciona sin credenciales. El modo Azure requiere configuración privada de tu entorno, una identidad autorizada y un ledger compartido con límites e intentos vigentes. Las autorizaciones y recursos del ensayo de octubre no se transfieren a otros usuarios ni permiten repetirlo ahora.
+## Usar la aplicación
 
-1. Revisa [el preflight Azure](docs/azure-preflight.md), [el despliegue](docs/deploy-hosting.md) y [el control de consumo](docs/analysis-budget.md).
-2. Prepara tu endpoint, modelo/deployment compatible, región y permisos Entra. Verifica que la configuración del esquema, identidad y commit coincida con tu autorización. Utiliza la ruta `azure_foundry_responses`; la ruta Content Understanding del código conserva un baseline histórico.
-3. Guarda la configuración privada fuera de Git. `.env.example` enumera las variables; no contiene permiso ni credenciales para el análisis real. El entorno de Azure necesita su propio archivo, distinto del utilizado por la demostración sintética.
-4. Configura el runtime privado y el mismo ledger canónico para todos los procesos que compartan el consumo. No copies ni reinicies un saldo para continuar una ejecución.
-5. Inicia la aplicación con ese archivo privado:
+Abre la dirección que muestra `azd deploy` y sigue este recorrido:
+
+1. Sube tu MP4 H.264 de hasta 90 segundos y 25 MiB.
+2. Escribe entre 3 y 6 pasos, con acciones concretas que puedan verse en la grabación.
+3. Inicia el análisis. El backend valida el vídeo, extrae fotogramas y llama a tu deployment de Azure.
+4. Revisa la checklist y pulsa los intervalos para comprobar la evidencia en el reproductor.
+5. Guarda tu valoración y descarga HTML o JSON. Al recargar, la aplicación recupera el mismo trabajo.
+
+El arranque y el despliegue no envían vídeos al modelo. Cada análisis que inicies puede generar cargos en tu suscripción. Los archivos corruptos, incompatibles o que exceden los límites se rechazan antes del envío.
+
+## Arquitectura
+
+![Arquitectura del despliegue azd: navegador, App Service, Azure Foundry y Container Registry](docs/architecture.svg)
+
+App Service Linux B1 ejecuta un contenedor con FastAPI y FFmpeg. El backend extrae hasta 49 fotogramas, conserva sus tiempos y usa Azure Foundry Responses v1. Una identidad administrada de Microsoft Entra da al host acceso al modelo y a la imagen de Container Registry. Las credenciales permanecen en Azure.
+
+Los vídeos, fotogramas, respuestas, revisiones y el ledger SQLite persisten en `/home/video-checklist`. La instalación usa una instancia y un proceso para conservar la coordinación de los análisis. Un identificador persistido permite recuperar la misma operación tras una recarga; recargar no inicia otra llamada de análisis.
+
+## Costes, datos y retirada
+
+App Service B1 y Container Registry Basic generan costes mientras existan. Se añaden el uso del modelo y los demás conceptos aplicables de Azure. Los límites de intentos y minutos del ledger no son un límite de facturación. Revisa precios y consumo en tu suscripción.
+
+Los vídeos se envían como fotogramas a tu recurso Azure. La aplicación conserva los archivos y resultados en el almacenamiento persistente del host y no programa su borrado. Usa vídeos que puedas tratar en Azure y descarga los informes que necesites antes de retirar la instalación:
 
 ```sh
-uv run --frozen --env-file /ruta/privada/azure.env uvicorn video_checklist.main:app --host 127.0.0.1 --port 8765
+azd down
 ```
 
-Si la ruta al archivo contiene espacios, el ensayo documentó un problema con `uv --env-file`. Puedes cargar un archivo de entorno de confianza en un subshell y usar `--no-env-file`, como describe el preflight. La configuración privada y los tokens permanecen en el backend.
-
-Las nuevas llamadas pueden generar cargos. Comprueba disponibilidad, precios, permisos y alcance de retirada antes de usarlas. Si un envío queda incierto, conserva su identificador y consulta la misma operación antes de considerar otro análisis.
+Confirma la eliminación de los recursos del entorno que te muestra `azd`. La retirada destruye los archivos guardados en el host. Consulta en la [guía](docs/deploy-hosting.md) la retención de respuestas del servicio.
 
 ## Código y comprobaciones
 
-| Área | Archivos |
-|---|---|
-| Interfaz | `video_checklist/static/index.html`, `app.js`, `styles.css` |
-| Backend HTTP | `video_checklist/main.py` |
-| Cliente Responses | `video_checklist/foundry.py` |
-| Vídeo y fotogramas | `video_checklist/media.py` |
-| Estado y consumo | `video_checklist/store.py`, `ledger.py` |
-| Informes | `video_checklist/export.py` |
+La interfaz está en `video_checklist/static/`; `main.py` expone la API; `foundry.py` integra Responses; `media.py` procesa el vídeo; `store.py` y `ledger.py` conservan estado y consumo; `export.py` genera informes. `azure.yaml`, `infra/` y los hooks describen el despliegue.
+
+Para desarrollar y ejecutar las pruebas locales necesitas [uv](https://docs.astral.sh/uv/getting-started/installation/) y FFmpeg/FFprobe:
 
 ```sh
-uv run --frozen pytest -q
+uv sync --frozen
+MVP_RUNTIME_DIR=/tmp/video-checklist-tests uv run --frozen pytest -q
 node --check video_checklist/static/app.js
 uv lock --check
 ```
 
-El segundo comando requiere Node.js. Las pruebas locales usan fixtures y transporte simulado; no sustituyen un recorrido real contra Azure.
+Node.js sólo es necesario para comprobar la sintaxis del JavaScript. Las pruebas usan dobles de transporte dentro de `tests/`, sin invocar Azure ni ofrecer un modo de análisis simulado en la aplicación. La comprobación completa requiere desplegar y recorrer la interfaz con un vídeo real.
 
-La evidencia independiente aceptó la revisión 5, commit original `8ac4dd4a1a73ee9ba6fb0d4d46eb960998f50249`, con 197 pruebas y 26 subpruebas locales, además de tres análisis Azure nuevos. La edición para distribución puede sanear documentación y ejemplos; ese saneamiento no constituye una nueva validación de Azure.
-
-## Resultados y límites
-
-En tres variantes de una sola grabación hubo **11 eventos emparejados**, sin falsos positivos ni omisiones entre los eventos evaluados. Se comprobaron los 12 saltos al tiempo guardado y seis informes descargados. El emparejamiento admitía ±3 segundos respecto a la anotación manual.
-
-Son tres ediciones de una única fuente, no tres muestras independientes. El muestreo de hasta dos fotogramas por segundo, 49 imágenes y 1280 píxeles de lado máximo puede perder acciones breves. Los tiempos son `model_estimate`; comprobar su formato no prueba interpretación correcta. La aplicación conserva incertidumbres y separa la valoración humana. No se midió ahorro de tiempo ni se acredita precisión general o uso industrial.
-
-El coste efectivo y la retirada seguían pendientes al cierre del ensayo. La reserva provisional del ledger no es una factura ni un límite de facturación de Azure. Los recursos que permanezcan desplegados pueden generar costes adicionales.
-
-## Privacidad y licencia
-
-Mantén vídeos, respuestas crudas, configuración y tokens fuera de Git y de los informes. La demo local escucha sólo en `127.0.0.1`. El alojamiento del ensayo era privado y no constituye una configuración multiusuario pública.
-
-El vídeo original es [Tying off onto the middle of a rope, de Slashme (2021)](https://commons.wikimedia.org/w/index.php?title=File:Tying_off_onto_the_middle_of_a_rope.webm&oldid=1120719840), bajo [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Los derivados usan los primeros 37 segundos, sin audio y convertidos a H.264/1280×720. La variante omitida elimina los primeros 13 segundos; la reordenada los intercambia con el tramo de 13 a 15 segundos. Conserva autor, fuente, licencia y cambios al distribuirlos, sin sugerir respaldo del autor.
-
-El código tiene licencia MIT; consulta [LICENSE](LICENSE). La licencia del código no cambia la del vídeo y sus derivados.
+La procedencia y el alcance de las pruebas históricas se explican en [SOURCE_REVISION.md](SOURCE_REVISION.md). La muestra de evaluación histórica usa una grabación real, con [atribución y licencia propias](docs/data.md). El código tiene licencia [MIT](LICENSE).

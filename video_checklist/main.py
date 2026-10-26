@@ -17,7 +17,6 @@ from fastapi.staticfiles import StaticFiles
 from .authorization import AuthorizationError, load_authorization
 from .config import LAB_ID, PROPOSAL_HASH, MAX_BYTES, ROOT, Settings
 from .export import html_report
-from .fixture import fixture_result
 from .ledger import Ledger
 from .media import inspect_video
 from .store import Store, now
@@ -62,7 +61,10 @@ def public_job(doc):
     return {k: v for k, v in doc.items() if k in {"id", "status", "phase", "message", "source", "video_url", "result", "created_at", "updated_at", "operation_id"}} | {"can_resume": bool(doc.get("operation_location")) and doc["status"] == "uncertain"}
 
 
-def cloud_authorization(settings):
+def cloud_authorization(settings, steps=None):
+    if settings.profile == "azd":
+        from .deployment import deployment_configuration
+        return deployment_configuration(settings, steps or default_steps())
     auth = load_authorization(settings.role)
     provider = auth.get("provider", "azure_content_understanding")
     if provider not in {"azure_content_understanding", "azure_foundry_responses"}:
@@ -75,7 +77,7 @@ def cloud_authorization(settings):
 def prepare_definition(auth, steps):
     if auth.get("provider") == "azure_foundry_responses":
         from .foundry import build_responses_definition
-        return build_responses_definition(steps, auth["model"])
+        return build_responses_definition(steps, auth["model"], deployment_bound=auth.get("_runtime_profile") == "azd")
     from .azure import build_analyzer_definition
     return build_analyzer_definition(steps, auth["model"], auth["processing_location"])
 
@@ -101,7 +103,12 @@ def analysis_binding(auth):
 def make_adapter(auth, role):
     from .azure import AzureAdapter, AzureConfig
     def revalidate():
-        current = load_authorization(role)
+        if auth.get("_runtime_profile") == "azd":
+            from .deployment import deployment_configuration
+            current = deployment_configuration(Settings("azure", auth["_ledger_path"].parent, None, role,
+                                                         "azure_foundry_responses", "azd"), auth["_steps"])
+        else:
+            current = load_authorization(role)
         if current["_authorization_hash"] != auth["_authorization_hash"]:
             raise AuthorizationError("La autorización cambió durante la operación; reconciliar antes de continuar.")
     if auth.get("provider") == "azure_foundry_responses":
@@ -110,6 +117,7 @@ def make_adapter(auth, role):
             endpoint=auth["endpoint"], tenant_id=auth["tenant_id"], principal_id=auth["principal_id"],
             deployment_name=auth["deployment_name"], model=auth["model"], schema_hash=auth["schema_hash"],
             model_version=auth["model_version"], processing_location=auth["processing_location"],
+            deployment_bound=auth.get("_runtime_profile") == "azd",
         ), authorize=revalidate)
     return AzureAdapter(AzureConfig(
         endpoint=auth["endpoint"], tenant_id=auth["tenant_id"], principal_id=auth["principal_id"],
@@ -153,63 +161,60 @@ def run_job(store, settings, id_, resume=False):
 
     try:
         clip = doc["clip"]
-        if settings.mode == "fixture":
-            result = fixture_result(doc["steps"], clip, progress)
+        auth = cloud_authorization(settings, doc["steps"])
+        if doc.get("analysis_provider") and doc["analysis_provider"] != auth.get("provider", "azure_content_understanding"):
+            raise AuthorizationError("Este job pertenece a otro proveedor; conserva su revisión y reconcilia antes de continuar.")
+        prepared = prepare_definition(auth, doc["steps"])
+        if prepared["schema_hash"] != auth["schema_hash"]:
+            raise AuthorizationError("La checklist no coincide con el esquema autorizado; no se reserva ni se envía el vídeo.")
+        binding = analysis_binding(auth)
+        if resume:
+            if doc.get("analysis_binding") != binding:
+                raise AuthorizationError("La operación guardada pertenece a otra revisión, modelo o recurso. Conserva su binding histórico y reconcilia antes de consultar o reinterpretar su respuesta.")
         else:
-            auth = cloud_authorization(settings)
-            if doc.get("analysis_provider") and doc["analysis_provider"] != auth.get("provider", "azure_content_understanding"):
-                raise AuthorizationError("Este job pertenece a otro proveedor; conserva su revisión y reconcilia antes de continuar.")
-            prepared = prepare_definition(auth, doc["steps"])
-            if prepared["schema_hash"] != auth["schema_hash"]:
-                raise AuthorizationError("La checklist no coincide con el esquema autorizado; no se reserva ni se envía el vídeo.")
-            binding = analysis_binding(auth)
+            # Bind before reserving or submitting. Redeploying a prompt or
+            # changing source SHA must never relabel an old cloud response.
+            store.update(id_, analysis_binding=binding,
+                         analysis_provider=auth.get("provider", "azure_content_understanding"))
+        ledger = Ledger(auth)
+        if resume:
+            reservation = doc.get("reservation_id")
+            if not reservation or not doc.get("operation_location"):
+                raise AuthorizationError("No hay una operación conocida que consultar; no se reenvía.")
+        else:
+            reservation = ledger.reserve(settings.role, id_, clip["duration_ms"], clip["hash"])
+            store.update(id_, reservation_id=reservation, status="submitting", phase="submitting", message="Reserva conjunta persistida; enviando el vídeo una sola vez.")
+        adapter = make_adapter(auth, settings.role)
+        try:
             if resume:
-                if doc.get("analysis_binding") != binding:
-                    raise AuthorizationError("La operación guardada pertenece a otra revisión, modelo o recurso. Conserva su binding histórico y reconcilia antes de consultar o reinterpretar su respuesta.")
+                raw, metadata = adapter.poll(doc["operation_location"], progress)
             else:
-                # Bind before reserving or submitting. Redeploying a prompt or
-                # changing source SHA must never relabel an old cloud response.
-                store.update(id_, analysis_binding=binding,
-                             analysis_provider=auth.get("provider", "azure_content_understanding"))
-            ledger = Ledger(auth)
-            if resume:
-                reservation = doc.get("reservation_id")
-                if not reservation or not doc.get("operation_location"):
-                    raise AuthorizationError("No hay una operación conocida que consultar; no se reenvía.")
-            else:
-                reservation = ledger.reserve(settings.role, id_, clip["duration_ms"], clip["hash"])
-                store.update(id_, reservation_id=reservation, status="submitting", phase="submitting", message="Reserva conjunta persistida; enviando el vídeo una sola vez.")
-            adapter = make_adapter(auth, settings.role)
-            try:
-                if resume:
-                    raw, metadata = adapter.poll(doc["operation_location"], progress)
-                else:
-                    raw, metadata = adapter.analyze(Path(doc["video_path"]), doc["steps"], {"authorization_confirmed": True, "reservation_id": reservation, "duration_ms": clip["duration_ms"]}, progress)
-            finally:
-                adapter.close()
-            # Raw cloud evidence stays private; never sent to the tracker or browser.
-            raw_path = settings.runtime / id_ / "response.private.json"
-            raw_path.write_text(json.dumps(raw, ensure_ascii=False))
-            raw_path.chmod(0o600)
-            if auth.get("provider") == "azure_foundry_responses":
-                from .foundry import normalize_response
-                sampling_bytes = (settings.runtime / id_ / "frames.private.json").read_bytes()
-                sampling = json.loads(sampling_bytes)
-                sampling["manifest_sha256"] = hashlib.sha256(sampling_bytes).hexdigest()
-                result = normalize_response(raw, doc["steps"], clip, auth["schema_hash"], sampling)
-            else:
-                from .normalizer import normalize
-                result = normalize(raw, doc["steps"], clip, schema_version=auth["schema_hash"], api_version="2025-11-01", model=auth["model"], source="azure")
-                result["analysis_provider"] = "azure_content_understanding"
-            result["service_metadata"] = {k: v for k, v in metadata.items() if k in {"api_version", "model", "model_provenance", "operation_id", "processing_location", "usage", "analysis_provider"}}
-            result["model_version"] = auth["model_version"]
-            result["region"] = auth["region"]
-            result["source_commit"] = auth.get("_commit") or binding["commit"]
-            result["analysis_binding"] = {key: binding[key] for key in
-                ("provider", "schema_hash", "commit", "model", "model_version", "api_version", "endpoint", "deployment_name")}
-            ledger.usage(reservation, metadata.get("usage", {}))
-            ledger.update(reservation, "succeeded")
-        store.update(id_, result=result, status="succeeded", phase="completed", message="Informe disponible." if settings.mode == "azure" else "Demo local preparada. Las observaciones son ilustrativas, no proceden del vídeo.")
+                raw, metadata = adapter.analyze(Path(doc["video_path"]), doc["steps"], {"authorization_confirmed": True, "reservation_id": reservation, "duration_ms": clip["duration_ms"]}, progress)
+        finally:
+            adapter.close()
+        # Raw cloud evidence stays private; never sent to the tracker or browser.
+        raw_path = settings.runtime / id_ / "response.private.json"
+        raw_path.write_text(json.dumps(raw, ensure_ascii=False))
+        raw_path.chmod(0o600)
+        if auth.get("provider") == "azure_foundry_responses":
+            from .foundry import normalize_response
+            sampling_bytes = (settings.runtime / id_ / "frames.private.json").read_bytes()
+            sampling = json.loads(sampling_bytes)
+            sampling["manifest_sha256"] = hashlib.sha256(sampling_bytes).hexdigest()
+            result = normalize_response(raw, doc["steps"], clip, auth["schema_hash"], sampling, model=auth["model"])
+        else:
+            from .normalizer import normalize
+            result = normalize(raw, doc["steps"], clip, schema_version=auth["schema_hash"], api_version="2025-11-01", model=auth["model"], source="azure")
+            result["analysis_provider"] = "azure_content_understanding"
+        result["service_metadata"] = {k: v for k, v in metadata.items() if k in {"api_version", "model", "model_provenance", "operation_id", "processing_location", "usage", "analysis_provider"}}
+        result["model_version"] = auth["model_version"]
+        result["region"] = auth["region"]
+        result["source_commit"] = auth.get("_commit") or binding["commit"]
+        result["analysis_binding"] = {key: binding[key] for key in
+            ("provider", "schema_hash", "commit", "model", "model_version", "api_version", "endpoint", "deployment_name")}
+        ledger.usage(reservation, metadata.get("usage", {}))
+        ledger.update(reservation, "succeeded")
+        store.update(id_, result=result, status="succeeded", phase="completed", message="Informe disponible.")
     except AuthorizationError as e:
         record_failure({"status": "uncertain" if reservation or doc.get("operation_location") else "failed", "phase": "authorization", "message": str(e)})
     except Exception as e:
@@ -255,7 +260,7 @@ def create_app(settings=None):
         hosted_probe = (os.getenv("MVP_HOSTED") == "true" and request.method == "GET"
                         and request.url.path == "/health" and origin is None)
         if hostname not in allowed and not hosted_probe:
-            return JSONResponse({"detail": "Esta aplicación sólo admite acceso local."}, status_code=403)
+            return JSONResponse({"detail": "Host no autorizado."}, status_code=403)
         expected_origin = os.getenv("MVP_BASE_URL", str(request.base_url)).rstrip("/")
         if origin and origin.rstrip("/") != expected_origin:
             return JSONResponse({"detail": "Origen de petición no autorizado."}, status_code=403)
@@ -291,7 +296,7 @@ def create_app(settings=None):
         if len(token) < 32 or not hmac.compare_digest(token, supplied):
             raise HTTPException(403, "Acceso al ledger no autorizado.")
         try:
-            auth = load_authorization(settings.role)
+            auth = cloud_authorization(settings)
             ledger = Ledger(auth)
             if auth.get("_ledger_url"):
                 raise AuthorizationError("El servidor debe alojar el ledger canónico, no otro relay.")
@@ -327,18 +332,16 @@ def create_app(settings=None):
                 cloud_enabled = True
             except AuthorizationError as e:
                 warnings.append(str(e))
-        else:
-            warnings.append("Modo fixture: salida sintética para recorrer la interfaz. No analiza el vídeo ni llama a Azure.")
         example_license = ""
         manifest = ROOT / "data/manifest.json"
         if manifest.exists():
             source = json.loads(manifest.read_text()).get("source", {})
             example_license = source.get("attribution", "") + " " + source.get("license_url", "") + " " + source.get("source_revision_url", "")
-        return {"mode": settings.mode, "cloud_enabled": cloud_enabled, "max_size_mib": 25, "max_duration_s": 90, "example_steps": default_steps(), "example_license": example_license.strip(), "warnings": warnings, "sample_available": bool(settings.sample and settings.sample.is_file())}
+        return {"mode": settings.mode, "cloud_enabled": cloud_enabled, "max_size_mib": 25, "max_duration_s": 90, "example_steps": default_steps(), "example_license": example_license.strip(), "warnings": warnings, "sample_available": bool(settings.sample and settings.sample.is_file()) and settings.profile != "azd", "editable_steps": settings.profile == "azd"}
 
     @app.get("/api/sample")
     def sample():
-        if not settings.sample or not settings.sample.is_file():
+        if settings.profile == "azd" or not settings.sample or not settings.sample.is_file():
             raise HTTPException(404, "Ejemplo no preparado. Sigue scripts/prepare_media.py o selecciona tu MP4.")
         return FileResponse(settings.sample, media_type="video/mp4", filename="base.mp4")
 
@@ -372,7 +375,7 @@ def create_app(settings=None):
             try:
                 media = await asyncio.to_thread(inspect_video, path, filename)
                 if settings.mode == "azure":
-                    auth = cloud_authorization(settings)
+                    auth = cloud_authorization(settings, selected)
             except ValueError as e:
                 raise HTTPException(422 if not isinstance(e, AuthorizationError) else 403, str(e)) from None
             clip = {**media, "hash": digest.hexdigest(), "name": filename, "license": license.strip()}
@@ -452,7 +455,7 @@ def create_app(settings=None):
         if doc["status"] != "uncertain" or not doc.get("operation_location") or settings.mode != "azure":
             raise HTTPException(409, "No hay operación Azure conocida para consultar.")
         try:
-            cloud_authorization(settings)
+            cloud_authorization(settings, doc["steps"])
         except AuthorizationError as e:
             raise HTTPException(403, str(e)) from None
         if not store.claim_resume(id_):

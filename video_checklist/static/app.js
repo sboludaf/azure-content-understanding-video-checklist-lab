@@ -64,7 +64,7 @@
     const unresolved = state.job?.status === 'uncertain';
     $('input-fields').disabled = Boolean(busy || state.job || unresolved);
     $('sample-button').disabled = Boolean(busy || state.job || unresolved || state.loadingSample);
-    const configured = state.config && (state.config.mode === 'fixture' || state.config.cloud_enabled);
+    const configured = state.config && state.config.cloud_enabled;
     $('analyze-button').disabled = Boolean(!configured || !state.fileValid || busy || unresolved || state.job);
     $('analyze-button').querySelector('span').textContent = state.submitting ? 'Enviando vídeo…' : 'Analizar vídeo';
     $('save-review').disabled = state.reviewSaving || !state.job?.result;
@@ -78,14 +78,13 @@
     });
     $('export-help').textContent = state.reviewDirty ? 'Guarda tu revisión para incluirla en ambos informes.' : 'Incluye fuente, incertidumbres y revisión guardada. El vídeo se queda fuera.';
     $('submit-help').textContent = !state.config ? 'Esperando conexión con el laboratorio.'
-      : state.config.mode === 'azure' && !state.config.cloud_enabled ? 'El análisis Azure está bloqueado hasta contar con autorización y configuración válidas.'
+      : state.config.mode === 'azure' && !state.config.cloud_enabled ? 'Despliega y configura los recursos Azure para poder analizar vídeos.'
       : state.pendingSubmission ? 'El envío aún no está confirmado. Recupera la misma solicitud antes de iniciar otra.'
       : state.job?.status === 'uncertain' ? 'Esta operación requiere consulta. No se creará otro análisis automáticamente.'
-      : state.config.mode === 'fixture' ? 'El ejemplo usa una respuesta de prueba local. No acredita integración real ni una validación independiente.'
       : 'El análisis revisa una grabación; no certifica la ejecución de un procedimiento.';
     const count = $('steps-list').children.length;
-    const frozenSchema = state.config?.mode === 'azure';
-    $('step-count').textContent = state.config?.mode === 'azure' ? `${count} pasos` : `${count} / 6`;
+    const frozenSchema = state.config?.editable_steps === false;
+    $('step-count').textContent = `${count} / 6`;
     $('add-step').hidden = frozenSchema;
     $('add-step').disabled = count >= 6 || Boolean(busy || state.job || unresolved);
     document.querySelectorAll('.step-id, .step-label').forEach(input => { input.readOnly = frozenSchema; });
@@ -289,7 +288,7 @@
   }
   async function submitAnalysis(recover = false) {
     if (state.submitting || !state.fileValid || state.job || state.pendingSubmission && !recover) return;
-    if (!state.config || state.config.mode !== 'fixture' && !state.config.cloud_enabled) return;
+    if (!state.config?.cloud_enabled) return;
     let steps;
     try { steps = getSteps(); } catch (error) { notify(error.message); return; }
     const license = $('license').value.trim();
@@ -329,11 +328,9 @@
     if ((source.includes('estimat') || source.includes('model')) && state.job?.result?.analysis_provider === 'azure_foundry_responses') return 'Tiempo estimado sobre fotogramas · requiere revisión';
     if (source.includes('estimat') || source.includes('model')) return 'Tiempo estimado por el modelo · requiere revisión';
     if (source.includes('service') || source.includes('segment') || source.includes('azure')) return 'Tiempo del segmento devuelto por el servicio';
-    if (source.includes('fixture')) return 'Tiempo de la respuesta de prueba local';
     return 'Origen temporal no confirmado';
   }
   function providerName(result, job) {
-    if (result.source === 'fixture' || job.source === 'fixture') return 'Fixture local';
     if (result.analysis_provider === 'azure_foundry_responses') return 'Microsoft Foundry · Azure Responses';
     if (!result.analysis_provider || result.analysis_provider === 'azure_content_understanding') return 'Azure Content Understanding';
     return stringify(result.analysis_provider);
@@ -381,10 +378,8 @@
     const durationMs = result.clip?.duration_ms;
     state.renderedResultId = job.id;
     $('result-empty').hidden = true; $('result-content').hidden = false;
-    $('result-source').className = `result-source${result.source === 'fixture' || job.source === 'fixture' ? ' fixture-source' : ''}`;
-    $('result-source').textContent = result.source === 'fixture' || job.source === 'fixture'
-      ? 'Respuesta de prueba local (fixture). No es un análisis Azure ni una validación independiente.'
-      : `${providerName(result, job)} · pendiente de revisión humana.`;
+    $('result-source').className = 'result-source';
+    $('result-source').textContent = `${providerName(result, job)} · pendiente de revisión humana.`;
     $('order-notice').hidden = !result.order_changed;
     $('order-notice').textContent = 'El orden visible difiere del esperado. Comprueba los intervalos: esta diferencia describe la grabación y no demuestra un incumplimiento.';
     $('checklist').replaceChildren();
@@ -412,7 +407,7 @@
       ['Archivo', result.clip?.name], ['SHA-256', result.clip?.hash], ['Duración', formatTime(durationMs)],
       ['Esquema', result.schema_version], ['API', result.api_version], ['Modelo', result.model],
       ['Versión del modelo', result.model_version],
-      ['Origen', result.source === 'fixture' || job.source === 'fixture' ? 'Fixture local' : 'Azure'],
+      ['Origen', 'Azure'],
       ['Proveedor', providerName(result, job)],
       ['Fuente y licencia', result.clip?.license],
     ];
@@ -470,7 +465,7 @@
     $('job-section').hidden = true; $('result-empty').hidden = false; $('result-content').hidden = true;
     $('active-evidence').hidden = true;
     clearNotice(); updateControls();
-    if (state.config?.mode === 'azure') notify('Un nuevo envío consumirá un nuevo intento. El servidor verificará autorización y presupuesto antes del análisis.', 'info');
+    if (state.config?.mode === 'azure') notify('Cada análisis llama al modelo desplegado en tu suscripción Azure y genera consumo.', 'info');
     if (!state.file) {
       releasePreview(); $('video-player').pause(); $('video-player').removeAttribute('src'); $('video-player').load();
       $('video-player').hidden = true; $('video-empty').hidden = false; $('clip-name').textContent = 'Sin vídeo seleccionado'; $('clip-duration').textContent = '—';
@@ -485,12 +480,11 @@
     setSteps(defaults);
     try {
       state.config = await request('/api/config');
-      const fixture = state.config.mode === 'fixture';
-      $('mode-banner').className = `mode-banner${fixture ? ' fixture' : !state.config.cloud_enabled ? ' offline' : ''}`;
-      $('mode-title').textContent = fixture ? 'Modo de prueba local · fixture' : state.config.cloud_enabled ? 'Análisis Azure disponible' : 'Análisis Azure pendiente de autorización';
-      $('mode-description').textContent = fixture ? 'Prueba el recorrido con datos ilustrativos. Este modo no acredita integración Azure ni una validación independiente.' : state.config.cloud_enabled ? 'El vídeo se analiza desde el servidor. La autorización y el presupuesto se comprueban antes de cada envío.' : 'Puedes preparar y previsualizar el vídeo. El servidor mantiene bloqueados los envíos al servicio.';
-      $('setup-description').textContent = fixture ? 'Un vídeo. Entre 3 y 6 pasos editables.' : 'Un vídeo. Cuatro pasos autorizados.';
-      $('steps-help').textContent = fixture ? 'Escribe acciones visibles, en el orden que esperas encontrar.' : 'Azure usa los cuatro pasos S1–S4 de este procedimiento. Cambiarlos requiere una nueva autorización; la validación previa bloqueará un esquema distinto.';
+      $('mode-banner').className = `mode-banner${!state.config.cloud_enabled ? ' offline' : ''}`;
+      $('mode-title').textContent = state.config.cloud_enabled ? 'Análisis Azure disponible' : 'Azure sin configurar';
+      $('mode-description').textContent = state.config.cloud_enabled ? 'El vídeo se analiza con el modelo desplegado en tu Azure. Cada envío genera consumo.' : 'Despliega la aplicación y sus recursos con azd para analizar vídeos reales.';
+      $('setup-description').textContent = 'Un vídeo. Entre 3 y 6 acciones visibles.';
+      $('steps-help').textContent = 'Describe las acciones que quieres comprobar, en el orden esperado. El modelo debe aportar evidencia visual para cada una.';
       const maxSize = Number(state.config.max_size_mib) || 25, maxDuration = Number(state.config.max_duration_s) || 90;
       $('file-meta').textContent = `MP4 · hasta ${maxSize} MiB · hasta ${maxDuration} segundos`;
       $('sample-button').hidden = !state.config.sample_available;

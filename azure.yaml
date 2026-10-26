@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: video-checklist
+requiredVersions:
+  azd: ">= 1.34.2"
+infra:
+  provider: bicep
+  path: infra
+  module: main
+services:
+  web:
+    project: .
+    language: docker
+    host: appservice
+    resourceName: ${AZURE_WEBAPP_NAME}
+    docker:
+      path: Dockerfile
+      context: .
+      platform: linux/amd64
+      remoteBuild: true
+    hooks:
+      prepackage:
+        posix:
+          shell: sh
+          run: scripts/azd-prepackage.sh
+          continueOnError: false
+        windows:
+          shell: pwsh
+          run: scripts/azd-prepackage.ps1
+          continueOnError: false

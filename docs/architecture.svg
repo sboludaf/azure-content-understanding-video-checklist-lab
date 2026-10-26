@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="680" height="1010" viewBox="0 0 680 1010" role="img" aria-labelledby="title desc">
-  <title id="title">Arquitectura desplegada de la aplicación de checklist de vídeo</title>
-  <desc id="desc">El navegador accede a una aplicación privada en Azure App Service Linux B1, West Europe. El backend Python con FastAPI y FFmpeg extrae fotogramas y tiempos, llama a Azure Foundry Responses v1 en Sweden Central y devuelve la checklist y las exportaciones. Estado y ledger SQLite persisten en home. Azure Container Registry entrega la imagen del contenedor y Microsoft Entra proporciona identidad administrada. Configuración histórica verificada el 15 de octubre de 2026; disponibilidad actual no verificada.</desc>
+  <title id="title">Arquitectura de la aplicación de checklist de vídeo con azd</title>
+  <desc id="desc">Cada lector despliega los recursos en su suscripción con azd provision y azd deploy. El navegador accede desde la IP autorizada a Azure App Service Linux B1. FastAPI y FFmpeg extraen fotogramas y tiempos, llaman a Azure Foundry Responses v1 y devuelven la checklist y los informes. El modelo y las regiones son configurables. El estado y el ledger SQLite persisten en home/video-checklist. Azure Container Registry construye y entrega la imagen; una identidad administrada de Microsoft Entra permite acceder al modelo y al registro.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#317e6b"/></marker>
   </defs>
   <rect width="680" height="1010" rx="20" fill="#f7faf9"/>
   <g font-family="Arial, Helvetica, sans-serif" fill="#18353b" text-anchor="middle">
-    <text x="340" y="43" font-size="28" font-weight="700">Arquitectura desplegada</text>
-    <text x="340" y="75" font-size="20" fill="#526b70">Configuración verificada · 15 oct 2026</text>
+    <text x="340" y="43" font-size="28" font-weight="700">Despliegue con azd</text>
+    <text x="340" y="75" font-size="20" fill="#526b70">Infraestructura del repositorio</text>
 
     <rect x="180" y="105" width="320" height="90" rx="14" fill="#18353b"/>
     <text x="340" y="142" font-size="24" font-weight="700" fill="#ffffff">Navegador</text>
@@ -15,7 +15,7 @@
 
     <rect x="40" y="235" width="270" height="90" rx="14" fill="#ffffff" stroke="#bed8d0" stroke-width="2"/>
     <text x="175" y="268" font-size="21" font-weight="700">Container Registry</text>
-    <text x="175" y="297" font-size="19" fill="#526b70">Imagen · Sweden Central</text>
+    <text x="175" y="297" font-size="19" fill="#526b70">Construcción e imagen</text>
     <rect x="370" y="235" width="270" height="90" rx="14" fill="#ffffff" stroke="#bed8d0" stroke-width="2"/>
     <text x="505" y="268" font-size="22" font-weight="700">Microsoft Entra ID</text>
     <text x="505" y="297" font-size="19" fill="#526b70">Identidad administrada</text>
@@ -28,7 +28,7 @@
 
     <rect x="40" y="365" width="600" height="330" rx="18" fill="#e7f4ee" stroke="#76ad9b" stroke-width="2"/>
     <text x="340" y="402" font-size="25" font-weight="700">App Service Linux B1</text>
-    <text x="340" y="430" font-size="20" fill="#526b70">Contenedor privado · West Europe</text>
+    <text x="340" y="430" font-size="20" fill="#526b70">Contenedor · acceso desde tu IP</text>
 
     <rect x="70" y="455" width="320" height="190" rx="14" fill="#ffffff" stroke="#bed8d0" stroke-width="2"/>
     <text x="230" y="492" font-size="24" font-weight="700">Python / FastAPI</text>
@@ -42,7 +42,7 @@
     <text x="515" y="526" font-size="19">Estado persistente</text>
     <text x="515" y="556" font-size="19">Trabajos y revisión</text>
     <text x="515" y="595" font-size="21" font-weight="700">Ledger SQLite</text>
-    <text x="515" y="624" font-size="19">Compartido</text>
+    <text x="515" y="624" font-size="19">Persistente</text>
     <path d="M 390 552 H 418" fill="none" stroke="#317e6b" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
 
     <path d="M 180 645 V 793" fill="none" stroke="#317e6b" stroke-width="3" marker-end="url(#arrow)"/>
@@ -54,10 +54,10 @@
 
     <rect x="70" y="795" width="540" height="125" rx="16" fill="#18353b"/>
     <text x="340" y="832" font-size="25" font-weight="700" fill="#ffffff">Azure Foundry Responses v1</text>
-    <text x="340" y="865" font-size="22" fill="#ffffff">gpt-6.1-sol · versión 2026-09-29</text>
-    <text x="340" y="897" font-size="20" fill="#d9ede8">Sweden Central</text>
+    <text x="340" y="865" font-size="22" fill="#ffffff">Análisis real de tus fotogramas</text>
+    <text x="340" y="897" font-size="20" fill="#d9ede8">Modelo y región configurables</text>
 
-    <text x="340" y="959" font-size="19" fill="#526b70">El acceso al host y al ledger era privado.</text>
-    <text x="340" y="987" font-size="19" fill="#526b70">Disponibilidad actual no verificada.</text>
+    <text x="340" y="959" font-size="19" fill="#526b70">Cada lector despliega en su suscripción.</text>
+    <text x="340" y="987" font-size="19" fill="#526b70">azd provision · azd deploy · azd down</text>
   </g>
 </svg>

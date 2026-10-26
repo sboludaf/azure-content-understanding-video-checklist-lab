@@ -57,9 +57,11 @@ PROMPT = (
 )
 
 
-def build_responses_definition(steps: list[dict[str, str]], model: str = MODEL) -> dict[str, Any]:
+def build_responses_definition(steps: list[dict[str, str]], model: str = MODEL, *, deployment_bound: bool = False) -> dict[str, Any]:
     """Freeze provider, exact model, sampling, prompt, and strict output schema."""
-    if model != MODEL:
+    if not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", model):
+        raise AzureError("configuration", "Configura un nombre de modelo Azure válido.")
+    if not deployment_bound and model != MODEL:
         raise AzureError("configuration", "Esta ruta fija el modelo solicitado gpt-6.1-sol.")
     candidates = sorted(validate_steps(steps), key=evidence_field_name)
     occurrence_properties = {
@@ -82,12 +84,17 @@ def build_responses_definition(steps: list[dict[str, str]], model: str = MODEL) 
     definition = {
         "provider": PROVIDER, "api_version": API_VERSION, "model": model,
         "sampling": dict(SAMPLING), "instructions": PROMPT,
-        "reasoning": {"effort": "high"}, "max_output_tokens": 16000,
+        "max_output_tokens": 16000,
         "background": True, "store": True,
         "text": {"format": {"type": "json_schema", "name": "manual_actions_frames_v1", "strict": True,
                  "schema": {"type": "object", "properties": fields,
                             "required": list(fields), "additionalProperties": False}}},
     }
+    # Readers may select a compatible non-reasoning vision model. Its default
+    # behavior is preferable to sending an unsupported reasoning parameter.
+    # Preserve the frozen experiment's exact request contract in legacy mode.
+    if not deployment_bound:
+        definition["reasoning"] = {"effort": "high"}
     digest = hashlib.sha256(json.dumps(definition, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
     return {"analyzer_id": "frame_actions_" + digest[:24], "schema_hash": digest, "definition": definition}
 
@@ -121,12 +128,16 @@ class FoundryConfig:
     api_version: str = API_VERSION
     poll_interval: float = 2.0
     poll_timeout: float = 600.0
+    deployment_bound: bool = False
 
     def __post_init__(self):
         object.__setattr__(self, "endpoint", validate_foundry_endpoint(self.endpoint))
         object.__setattr__(self, "tenant_id", _uuid(self.tenant_id, "tenant_id"))
         object.__setattr__(self, "principal_id", _uuid(self.principal_id, "principal_id"))
-        if (self.model != MODEL or self.model_version != "2026-09-29" or self.api_version != API_VERSION
+        model_valid = isinstance(self.model, str) and bool(re.fullmatch(r"[A-Za-z0-9._-]{1,128}", self.model))
+        version_valid = isinstance(self.model_version, str) and bool(re.fullmatch(r"[A-Za-z0-9._-]{1,128}", self.model_version))
+        legacy_valid = self.deployment_bound or (self.model == MODEL and self.model_version == "2026-09-29")
+        if (not model_valid or not version_valid or not legacy_valid or self.api_version != API_VERSION
                 or not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", self.deployment_name)
                 or not re.fullmatch(r"[a-f0-9]{64}", self.schema_hash)
                 or self.poll_interval < 1 or self.poll_timeout < 1):
@@ -183,10 +194,11 @@ class FoundryAdapter(AzureAdapter):
     def _token(self) -> str:
         self._check_authorization()
         if self._credential is None:
-            mode = os.getenv("MVP_AZURE_CREDENTIAL_MODE", "azure_cli")
+            mode = os.getenv("MVP_AZURE_CREDENTIAL_MODE", "managed_identity")
             if mode == "managed_identity":
                 from azure.identity import ManagedIdentityCredential
-                self._credential = ManagedIdentityCredential()
+                client_id = os.getenv("AZURE_CLIENT_ID")
+                self._credential = ManagedIdentityCredential(**({"client_id": client_id} if client_id else {}))
             elif mode == "azure_cli":
                 from azure.identity import AzureCliCredential
                 self._credential = AzureCliCredential(tenant_id=self.config.tenant_id, process_timeout=10)
@@ -254,7 +266,7 @@ class FoundryAdapter(AzureAdapter):
     def analyze(self, video: Path, steps: list[dict[str, str]], metadata: dict[str, Any], progress=None):
         if metadata.get("authorization_confirmed") is not True or not metadata.get("reservation_id"):
             raise AzureError("authorization", "Falta autorización vigente y reserva del ledger conjunto.")
-        prepared = build_responses_definition(steps, self.config.model)
+        prepared = build_responses_definition(steps, self.config.model, deployment_bound=self.config.deployment_bound)
         if prepared["schema_hash"] != self.config.schema_hash:
             raise AzureError("schema", "La definición de fotogramas no coincide con el esquema autorizado.")
         video = Path(video)
@@ -272,7 +284,7 @@ class FoundryAdapter(AzureAdapter):
             content.extend([{"type": "input_text", "text": "Frame timestamp_ms: " + str(frame["timestamp_ms"])},
                             {"type": "input_image", "detail": "high", "image_url": "data:image/jpeg;base64," + base64.b64encode(image_path.read_bytes()).decode()}])
         frozen = prepared["definition"]
-        body = {key: frozen[key] for key in ("instructions", "reasoning", "max_output_tokens", "background", "store", "text")}
+        body = {key: frozen[key] for key in ("instructions", "reasoning", "max_output_tokens", "background", "store", "text") if key in frozen}
         body.update(model=self.config.deployment_name, input=[{"role": "user", "content": content}])
         token = self._token()
         request_id = str(uuid.uuid4())
@@ -333,7 +345,7 @@ class FoundryAdapter(AzureAdapter):
         raise AzureError("poll_timeout", "La respuesta sigue activa. Reanuda la consulta por su ID sin reenviar los fotogramas.", operation_location=location, uncertain=True)
 
 
-def normalize_response(raw: dict, steps: list[dict[str, str]], clip: dict, schema_hash: str, sampling: dict) -> dict:
+def normalize_response(raw: dict, steps: list[dict[str, str]], clip: dict, schema_hash: str, sampling: dict, *, model: str = MODEL) -> dict:
     """Validate frame witnesses without inventing events or semantic grounding."""
     texts = []
     for output in raw.get("output", []):
@@ -393,7 +405,7 @@ def normalize_response(raw: dict, steps: list[dict[str, str]], clip: dict, schem
             witnesses.append({name: row.get(name) for name in ("before_ms", "after_ms", "before_state", "transition", "after_state", "constraints")})
         fields[key] = {"type": "array", "valueArray": encoded_rows}
     converted = {"status": "Succeeded", "result": {"apiVersion": API_VERSION, "contents": [{"kind": "audioVisual", "fields": fields}]}}
-    result = normalize_cu(converted, steps, clip, schema_hash, API_VERSION, MODEL, "azure")
+    result = normalize_cu(converted, steps, clip, schema_hash, API_VERSION, model, "azure")
     # The common normalizer may omit malformed occurrences. Bind evidence by
     # original returned-row position, never by expected sequence or gold times.
     by_position = {index + 1: witness for index, witness in enumerate(witnesses)}

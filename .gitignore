@@ -12,3 +12,9 @@ __pycache__/
 runtime/
 .DS_Store
 .copilot-azure/
+.azure/*
+!.azure/deployment-plan.md
+infra/*.json.tmp
+infra/main.json
+infra/resources.json
+.build/

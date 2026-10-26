@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from video_checklist.config import Settings
 from video_checklist.main import create_app
+from video_checklist import main
+from tests.mock_result import mock_result
 
 STEPS = [{"id": "S1", "label": "Preparar cuerda"}, {"id": "S2", "label": "Pasar por anilla"}, {"id": "S3", "label": "Tensar cuerda"}]
 
@@ -19,8 +21,20 @@ def video(tmp_path_factory):
 
 
 @pytest.fixture
-def client(tmp_path):
-    with TestClient(create_app(Settings("fixture", tmp_path, None, "implementer"))) as c:
+def mock_analysis(monkeypatch):
+    # Deliberate offline doubles for HTTP/storage tests, not an application mode.
+    monkeypatch.setattr(main, "cloud_authorization", lambda *_: {"provider": "azure_foundry_responses"})
+    def complete(store, settings, id_, resume=False):
+        doc = store.get(id_)
+        result = mock_result(doc["steps"], doc["clip"], lambda *_: None)
+        result["source"] = "azure"
+        store.update(id_, result=result, status="succeeded", phase="completed", message="Offline test complete")
+    monkeypatch.setattr(main, "run_job", complete)
+
+
+@pytest.fixture
+def client(tmp_path, mock_analysis):
+    with TestClient(create_app(Settings("azure", tmp_path, None, "implementer"))) as c:
         yield c
 
 
@@ -34,9 +48,9 @@ def test_entire_local_journey_and_idempotency(client, video):
     id_ = created.json()["id"]
     job = client.get(f"/api/jobs/{id_}").json()
     assert job["status"] == "succeeded"
-    assert job["source"] == "fixture"
+    assert job["source"] == "azure"
     assert job["result"]["clip"]["hash"]
-    assert "FIXTURE" in job["result"]["issues"][0]
+    assert "MOCK" in job["result"]["issues"][0]
     assert upload(client, video).json()["id"] == id_
     report = client.get(f"/api/jobs/{id_}/export.json").json()
     html = client.get(f"/api/jobs/{id_}/export.html")
@@ -75,8 +89,8 @@ def test_cloud_unconfigured_does_not_reserve_or_call(tmp_path, video, monkeypatc
             assert db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 0
 
 
-def test_reopen_keeps_completed_job(tmp_path, video):
-    settings = Settings("fixture", tmp_path, None, "implementer")
+def test_reopen_keeps_completed_job(tmp_path, video, mock_analysis):
+    settings = Settings("azure", tmp_path, None, "implementer")
     with TestClient(create_app(settings)) as client:
         id_ = upload(client, video).json()["id"]
     with TestClient(create_app(settings)) as client:

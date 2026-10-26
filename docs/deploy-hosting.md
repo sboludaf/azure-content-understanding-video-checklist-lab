@@ -1,60 +1,80 @@
-# Alojar la aplicación y su ledger privado
+# Despliegue con Azure Developer CLI
 
-`infra/main.bicep` prepara Container Registry y, con `deployHosting=true`, App Service Linux. Los nombres de `infra/parameters.example.json` son ejemplos neutros: sustitúyelos por nombres propios y globalmente únicos cuando Azure lo requiera. El ejemplo conserva `deployHosting=false` y modo `fixture`.
+El [inicio del README](../README.md#desplegar-en-tu-azure) crea una instalación propia. `azd provision` despliega Bicep y las asignaciones de roles; `azd deploy` construye la imagen en Azure Container Registry y la publica en App Service. `azd deploy` por sí solo necesita una infraestructura aprovisionada previamente.
 
-Copia parámetros fuera del repositorio y fija regiones, nombres, SKU, IP autorizada, imagen, SHA y fecha ISO de retirada. El marcador de `cleanupDueAt` debe reemplazarse por una fecha válida; no concede permiso de borrado. `ownerIpCidr` debe ser tu red autorizada. Revisa HTTPS y restricciones web/SCM: no es una aplicación multiusuario pública.
+## Configuración del entorno
 
-Guarda appsettings y `MVP_AUTHORIZATION_JSON` fuera de Git. El arranque escribe la autorización fuera de la imagen; no incluyas configuración ni tokens en notas o logs.
+Selecciona tu suscripción y restringe el acceso web a tu IP pública. La cuenta que aprovisiona debe poder crear el grupo de recursos, los servicios y las asignaciones de roles. La identidad administrada de la aplicación recibe `AcrPull` en su registro y `Cognitive Services OpenAI User` en su cuenta de IA.
 
-## Construcción y despliegue
+| Variable de `azd` | Uso |
+|---|---|
+| `AZURE_SUBSCRIPTION_ID` | Suscripción propia donde se crearán los recursos. |
+| `AZURE_LOCATION` | Región del grupo de recursos y Container Registry. |
+| `AZURE_APP_SERVICE_LOCATION` | Región del host; por defecto `westeurope`. |
+| `AZURE_AI_LOCATION` | Región de la cuenta de IA; por defecto `swedencentral`. |
+| `MVP_ALLOWED_CLIENT_CIDR` | IP pública autorizada, con `/32` para IPv4 o `/128` para IPv6. |
+| `AZURE_OPENAI_MODEL_NAME` | Modelo; por defecto `gpt-6.1-sol`. |
+| `AZURE_OPENAI_MODEL_VERSION` | Versión del modelo; por defecto `2026-09-29`. |
+| `AZURE_OPENAI_DEPLOYMENT_NAME` | Nombre del deployment; por defecto `video-checklist`. |
+| `AZURE_OPENAI_DEPLOYMENT_SKU` | SKU del deployment; por defecto `GlobalStandard`. |
+| `AZURE_OPENAI_CAPACITY` | Unidades de capacidad; por defecto `1`. |
+| `MVP_MAX_ANALYSES` | Límite acumulado de análisis; por defecto `1000`. |
+| `MVP_MAX_TOTAL_MINUTES` | Límite acumulado de minutos; por defecto `1500`. |
 
-Los comandos siguientes son plantillas de operaciones con coste, no comprobaciones offline. Revisa identidad, alcance y parámetros antes de ejecutarlos en tu propia suscripción. En el snapshot sin `.git`, el SHA original se documenta en `SOURCE_REVISION.md`; para una modificación de código usa su propia revisión comprobada.
+Puedes cambiar una variable antes de `azd provision`:
 
 ```sh
-MVP_SUB='<YOUR_SUBSCRIPTION_ID>'
-MVP_RG='<YOUR_RESOURCE_GROUP>'
-MVP_ACR='<YOUR_REGISTRY_NAME>'
-MVP_APP='<YOUR_APP_NAME>'
-MVP_PARAMETERS_FILE='/ruta/privada/hosting-parameters.json'
-MVP_DEPLOYMENT_OUTPUT='/ruta/privada/hosting-deployment.json'
-MVP_APP_SETTINGS_FILE='/ruta/privada/hosting-appsettings.json'
-MVP_SOURCE_COMMIT='8ac4dd4a1a73ee9ba6fb0d4d46eb960998f50249'
-MVP_IMAGE_REF="video-checklist:${MVP_SOURCE_COMMIT}"
-
-az deployment group what-if --subscription "$MVP_SUB" --resource-group "$MVP_RG" \
-  --template-file infra/main.bicep --parameters @"$MVP_PARAMETERS_FILE" deployHosting=false
-
-az deployment group create --subscription "$MVP_SUB" --resource-group "$MVP_RG" \
-  --name video-registry --template-file infra/main.bicep \
-  --parameters @"$MVP_PARAMETERS_FILE" deployHosting=false \
-  --output json > "$MVP_DEPLOYMENT_OUTPUT"
-
-az acr update --subscription "$MVP_SUB" --resource-group "$MVP_RG" --name "$MVP_ACR" \
-  --role-assignment-mode rbac --output none
-
-az acr build --subscription "$MVP_SUB" --resource-group "$MVP_RG" --registry "$MVP_ACR" \
-  --image "$MVP_IMAGE_REF" --platform linux/amd64 --file Dockerfile \
-  --build-arg "MVP_SOURCE_COMMIT=$MVP_SOURCE_COMMIT" .
-
-az deployment group what-if --subscription "$MVP_SUB" --resource-group "$MVP_RG" \
-  --template-file infra/main.bicep --parameters @"$MVP_PARAMETERS_FILE" \
-  deployHosting=true analysisMode=fixture
-
-az deployment group create --subscription "$MVP_SUB" --resource-group "$MVP_RG" \
-  --name video-hosting --template-file infra/main.bicep \
-  --parameters @"$MVP_PARAMETERS_FILE" deployHosting=true analysisMode=fixture \
-  --output json > "$MVP_DEPLOYMENT_OUTPUT"
-
-az webapp config appsettings set --subscription "$MVP_SUB" --resource-group "$MVP_RG" \
-  --name "$MVP_APP" --settings @"$MVP_APP_SETTINGS_FILE" --query '[].name' --output tsv
+azd env set AZURE_APP_SERVICE_LOCATION westeurope
+azd env set AZURE_AI_LOCATION swedencentral
 ```
 
-El modo fixture alojado no acredita integración. Para Azure utiliza proveedor, deployment e identidad propios según [azure-preflight.md](azure-preflight.md).
+Comprueba que tu cuenta dispone de cuota para el modelo, versión y SKU elegidos en esa región. Los valores predeterminados son `gpt-6.1-sol`, versión `2026-09-29`, y `GlobalStandard`. El despliegue no cambia de modelo o región automáticamente. Si no están disponibles, configura valores compatibles y vuelve a aprovisionar. El modelo debe admitir imágenes, Responses v1, ejecución en segundo plano y salida JSON Schema; la compatibilidad y calidad de otro modelo requieren verificación propia. `GlobalStandard` no garantiza que el procesamiento quede limitado a la región de la cuenta.
 
-## Salud, persistencia y retirada
+El nombre histórico del repositorio incluye Content Understanding. El análisis actual utiliza Azure Foundry Responses v1.
 
-Durante un arranque en frío App Service puede mostrar una página provisional con HTTP 200. Comprueba JSON de `/health`, SHA de fuente igual al esperado y `/api/config` de la aplicación. El ensayo utilizó B1, una instancia y `/home` persistente; no impone el SKU de una instalación nueva.
+## Publicar cambios
 
-El ledger SQLite persiste fuera de la imagen. Todos los clientes del mismo alcance usan el mismo saldo por el relay HTTPS del host, sin crear una copia local. `MVP_LEDGER_URL` y `shared_ledger_url` identifican el mismo relay; `MVP_LEDGER_PATH` y `shared_ledger_path` identifican su ruta canónica. El token llega por un archivo privado indicado por `MVP_LEDGER_RELAY_TOKEN_PATH` y viaja en header, nunca en URL.
+Los hooks obtienen la revisión de Git para incluirla en la imagen. Guarda los cambios de la aplicación en un commit antes de desplegar:
 
-Mantén una instancia/worker mientras dependas del SQLite y sus controles de concurrencia. Antes de retirar host, cuenta, registro o respuestas conserva estado/evidencia y revisa recursos exactos, permiso y costes. La aplicación no hace esa retirada por sí sola.
+```sh
+git add <archivos-modificados>
+git commit -m "Describe el cambio"
+azd deploy
+```
+
+El contenedor incluye las dependencias Python y FFmpeg; el lector no necesita prepararlos en su equipo para utilizar el alojamiento Azure. La construcción remota evita depender de la arquitectura de su ordenador. Si la suscripción bloquea ACR Tasks, revisa sus permisos y disponibilidad; la construcción local alternativa requiere Docker.
+
+Al cambiar `infra/`, `azure.yaml` o los valores que consume la infraestructura, ejecuta:
+
+```sh
+azd provision
+azd deploy
+```
+
+## Comprobar el despliegue
+
+Después de `azd provision` la aplicación todavía necesita su imagen: ejecuta `azd deploy`, que muestra su dirección. El entorno conserva también la salida `SERVICE_WEB_ENDPOINT_URL`. Abre `/health` desde la IP autorizada y comprueba que devuelve JSON de la aplicación, `mode: azure` y la revisión de Git desplegada. Una página provisional de App Service con HTTP 200 no demuestra que el contenedor esté listo.
+
+Prueba desde la interfaz un MP4 propio dentro de los límites: edita los pasos, inicia un análisis real, comprueba los saltos al vídeo, guarda una revisión y abre ambos informes. Recarga durante la consulta de una operación para comprobar que recupera el mismo trabajo. Verifica también que un archivo inválido se rechaza antes de invocar el modelo.
+
+El despliegue no ejecuta análisis automáticamente. La nueva infraestructura y este recorrido necesitan comprobación en tu suscripción; la evidencia del ensayo original no los sustituye.
+
+## Estado, consumo y datos
+
+La aplicación mantiene el vídeo, los fotogramas, la respuesta y las revisiones en `/home/video-checklist`. Un ledger SQLite persistente reserva cada análisis antes de enviarlo y limita intentos y duración acumulada. Usa una instancia y un worker; escalar exige sustituir esta coordinación por almacenamiento compartido apropiado.
+
+Los límites iniciales son 1000 análisis y 1500 minutos acumulados. Son controles de la aplicación, no un presupuesto monetario ni una garantía sobre la factura. Una operación incierta conserva su estado y su reserva. No borres el ledger para repetir una solicitud cuyo resultado desconoces.
+
+La aplicación usa Responses con almacenamiento de respuesta en el servicio para recuperar operaciones. No elimina esas respuestas automáticamente. Revisa la [retención y eliminación de Responses](https://learn.microsoft.com/azure/ai-foundry/openai/how-to/responses) para tu recurso, además de los archivos que conserva App Service. Los vídeos privados, tokens y archivos de configuración quedan fuera de Git.
+
+## Retirar la instalación
+
+Descarga primero los informes que quieras conservar y ejecuta en el entorno correcto:
+
+```sh
+azd down
+```
+
+Revisa los recursos enumerados antes de confirmar. Se elimina el alojamiento y su estado persistente, junto con los recursos del entorno que retire `azd`. Comprueba después los recursos y el consumo de tu suscripción. App Service, Container Registry y el uso del modelo tienen costes independientes.
+
+Referencia: [flujo de trabajo de Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-commands).

@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def main():
-    raw = os.getenv("MVP_AUTHORIZATION_JSON")
+    raw = os.getenv("MVP_AUTHORIZATION_JSON") if os.getenv("MVP_RUNTIME_PROFILE", "azd") == "legacy" else None
     if raw:
         auth = json.loads(raw)
         path = Path(os.environ["MVP_AUTHORIZATION_PATH"])
